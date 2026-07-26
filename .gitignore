@@ -1,0 +1,15 @@
+# n8n
+n8n_data/
+
+# Environment
+.env
+
+# VS Code
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+
+# Windows
+Thumbs.db
