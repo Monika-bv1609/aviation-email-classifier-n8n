@@ -1,0 +1,399 @@
+{
+  "name": "Email Classification V1",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f9ace976-dc73-4423-8b72-7f0814a5e3b0",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1515bc88-5700-4667-ad29-562bc5f3d668",
+              "name": "message_id",
+              "value": "MSG-001",
+              "type": "string"
+            },
+            {
+              "id": "7435cc47-a48f-4ec2-8c0e-641fd8dc4203",
+              "name": "provider",
+              "value": "gmail",
+              "type": "string"
+            },
+            {
+              "id": "78825fcd-662f-461c-9b89-5da4bdafaa76",
+              "name": "sender_email",
+              "value": "john@example.com",
+              "type": "string"
+            },
+            {
+              "id": "cc751da4-42b8-43ff-9ca5-f4c3791364d2",
+              "name": "body",
+              "value": "My flight was cancelled. I need a refund.",
+              "type": "string"
+            },
+            {
+              "id": "9c904834-9290-4558-aa14-fdf74d7396bd",
+              "name": "subject",
+              "value": "Refund Request",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        192,
+        -288
+      ],
+      "id": "0ef3303c-bde3-4f1d-a2fc-b9a45c7412a7",
+      "name": "Mock Email"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the current email\nconst email = $input.item.json;\n\n// Required fields\nconst requiredFields = [\n  \"message_id\",\n  \"provider\",\n  \"sender_email\",\n  \"subject\",\n  \"body\"\n];\n\n// Validate each field\nfor (const field of requiredFields) {\n  if (\n    email[field] === undefined ||\n    email[field] === null ||\n    email[field].toString().trim() === \"\"\n  ) {\n    throw new Error(`${field} is missing or empty.`);\n  }\n}\n\n// Validation successful\nreturn [\n  {\n    json: email\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -16
+      ],
+      "id": "e7996ffc-7679-4533-bc94-1e113cba8618",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GROQ_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an AI email classifier for an aviation company. Respond ONLY with valid JSON containing category, confidence, and reason.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Classify this email.\\n\\nSubject: {{$json.subject}}\\n\\nBody: {{$json.body}}\"\n    }\n  ],\n  \"temperature\": 0,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        656,
+        288
+      ],
+      "id": "2c179cfa-0c48-4814-bc22-1c2179578658",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $('Code in JavaScript').first().json;\n\nconst response = $input.item.json;\nconst ai = JSON.parse(response.choices[0].message.content);\n\nreturn [\n  {\n    json: {\n      message_id: email.message_id,\n      provider: email.provider,\n      sender_email: email.sender_email,\n      subject: email.subject,\n      body: email.body,\n\n      category: ai.category,\n      confidence: ai.confidence,\n      reason: ai.reason\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        288
+      ],
+      "id": "63a16104-84a5-41fa-932e-a0298e8607a3",
+      "name": "Parse AI Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read the parsed email + AI classification\nconst email = $input.item.json;\n\n// Business rule\nconst CONFIDENCE_THRESHOLD = 0.80;\n\n// Determine processing status\nlet processingStatus;\n\nif (email.confidence >= CONFIDENCE_THRESHOLD) {\n  processingStatus = \"AUTO_PROCESSED\";\n} else {\n  processingStatus = \"PENDING_REVIEW\";\n}\n\n// Return updated object\nreturn [\n  {\n    json: {\n      ...email,\n      processing_status: processingStatus\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        288
+      ],
+      "id": "effce1af-2f16-4873-ae09-a6215fe9a1c3",
+      "name": "Determine Processing Status"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "emails",
+          "mode": "list",
+          "cachedResultName": "emails"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "confidence": "={{$json.confidence}}",
+            "message_id": "={{$json.message_id}}",
+            "sender_email": "={{$json.sender_email}}",
+            "subject": "={{$json.subject}}",
+            "category": "={{$json.category}}",
+            "processing_status": "={{$json.processing_status}}",
+            "ai_model": "llama-3.1-8b-instant",
+            "snippet": "={{$json.body}}",
+            "processed_at": "={{$now}}",
+            "account_id": 3,
+            "id": 3
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sender_email",
+              "displayName": "sender_email",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "snippet",
+              "displayName": "snippet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_model",
+              "displayName": "ai_model",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1328,
+        288
+      ],
+      "id": "5154c177-5edd-44df-b6f3-087cc5ef696b",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "GpVRO5QDIz2WSSuJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Mock Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Email": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Determine Processing Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Processing Status": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7dd62afc-49a2-4883-866b-269576828506",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2d86857e38f2b8b2b983d7a0fbfa95a911b402323662db1bb77397512c066586"
+  },
+  "nodeGroups": [],
+  "id": "HpIdpUGRdGgWM32Q",
+  "tags": []
+}
